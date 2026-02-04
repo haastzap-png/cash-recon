@@ -10,12 +10,12 @@ import streamlit as st
 from cash_recon.detect import detect_xlsx_kind
 from cash_recon.logic import build_cash_recon
 from cash_recon.models import Period
-from cash_recon.parse import (
-    load_hotcake_bills_xlsx,
-    load_hotcake_orders_xlsx,
-    load_card_machine_xlsx,
-    load_pos_history_orders_xlsx,
-)
+from cash_recon.parse import load_hotcake_bills_xlsx, load_hotcake_orders_xlsx, load_pos_history_orders_xlsx
+
+try:
+    from cash_recon.parse import load_card_machine_xlsx
+except ImportError:
+    load_card_machine_xlsx = None
 from cash_recon.report import build_cash_recon_workbook
 
 
@@ -101,6 +101,8 @@ card_machine_up = st.file_uploader(
     type=["xlsx"],
     key=f"card_{st.session_state['upload_key']}",
 )
+if load_card_machine_xlsx is None:
+    st.info("目前版本未包含智慧刷卡機解析功能；如需使用此功能請更新程式碼後再試。")
 
 hotcake_bills_up = None
 hotcake_orders_up = None
@@ -158,6 +160,8 @@ if run:
         card_bytes = card_machine_up.getvalue() if card_machine_up else None
 
         try:
+            if card_bytes and load_card_machine_xlsx is None:
+                raise ValueError("目前版本未包含智慧刷卡機解析功能，請更新程式碼後再試。")
             orders = load_hotcake_orders_xlsx(orders_bytes)
             bills = load_hotcake_bills_xlsx(bills_bytes)
             pos_orders = load_pos_history_orders_xlsx(pos_bytes) if pos_bytes else None
