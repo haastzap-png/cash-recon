@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from io import BytesIO
+import inspect
 import os
 from typing import Optional
 
@@ -55,6 +56,29 @@ def _reset_app():
     st.session_state["upload_key"] = st.session_state.get("upload_key", 0) + 1
     st.session_state.pop("result_ready", None)
     st.rerun()
+
+
+def _build_cash_recon_compat(*, period, store, orders, bills, pos_orders, card_machine_rows, topup_mode, time_tolerance_minutes):
+    kwargs = {
+        "period": period,
+        "store": store,
+        "orders": orders,
+        "bills": bills,
+        "pos_orders": pos_orders,
+        "card_machine_rows": card_machine_rows,
+        "topup_mode": topup_mode,
+        "time_tolerance_minutes": time_tolerance_minutes,
+    }
+
+    sig = inspect.signature(build_cash_recon)
+    supported = set(sig.parameters.keys())
+
+    # Backward-compat: some older versions use time_tolerance instead of time_tolerance_minutes.
+    if "time_tolerance_minutes" not in supported and "time_tolerance" in supported:
+        kwargs["time_tolerance"] = kwargs.pop("time_tolerance_minutes")
+
+    filtered = {k: v for k, v in kwargs.items() if k in supported}
+    return build_cash_recon(**filtered)
 
 
 st.set_page_config(page_title="現金對帳表", layout="wide")
@@ -172,7 +196,7 @@ if run:
             st.stop()
 
     with st.spinner("計算中..."):
-        result = build_cash_recon(
+        result = _build_cash_recon_compat(
             period=Period(start=start_dt, end=end_dt),
             store=store.strip(),
             orders=orders,
