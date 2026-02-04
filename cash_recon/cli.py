@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .logic import build_cash_recon
 from .models import Period
-from .parse import load_hotcake_bills_xlsx, load_hotcake_orders_xlsx, load_pos_history_orders_xlsx
+from .parse import load_hotcake_bills_xlsx, load_hotcake_orders_xlsx, load_pos_history_orders_xlsx, load_card_machine_xlsx
 from .report import save_cash_recon_report
 
 
@@ -27,6 +27,7 @@ def main() -> int:
     p.add_argument("--hotcake-bills", required=True, type=Path)
     p.add_argument("--hotcake-orders", required=True, type=Path)
     p.add_argument("--pos-orders", type=Path, default=None)
+    p.add_argument("--card-machine", type=Path, default=None)
     p.add_argument(
         "--topup-mode",
         choices=["settlement_time", "exclude"],
@@ -41,6 +42,7 @@ def main() -> int:
     orders = load_hotcake_orders_xlsx(args.hotcake_orders)
     bills = load_hotcake_bills_xlsx(args.hotcake_bills)
     pos_orders = load_pos_history_orders_xlsx(args.pos_orders) if args.pos_orders else None
+    card_rows = load_card_machine_xlsx(args.card_machine) if args.card_machine else None
 
     result = build_cash_recon(
         period=period,
@@ -48,6 +50,7 @@ def main() -> int:
         orders=orders,
         bills=bills,
         pos_orders=pos_orders,
+        card_machine_rows=card_rows,
         topup_mode=args.topup_mode,
         time_tolerance_minutes=args.time_tolerance,
     )

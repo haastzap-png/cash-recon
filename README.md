@@ -8,9 +8,10 @@
 - Hotcake：帳單紀錄（含 `服務`、`儲值金` 分頁）
 - Hotcake：訂單/預約報表（含 `訂單報表` 分頁）
 - 收銀機：歷史訂單（選配；上傳後會核對現金是否一致）
+- 智慧刷卡機交易紀錄（選配；會統計實付合計）
 
 系統會嘗試自動辨識檔案類型，並對欄位標題做容錯（例如去空白/同義欄名）。
-若平台改了表頭，可在 App 的「進階設定」手動指定欄位。
+若平台改了表頭，請更新 GitHub 版本（不提供手動欄位指定）。
 分店建議從下拉選單選擇（中壢三光店、桃園中平店、楊梅四維店、中壢體育園區店），避免名稱不一致。
 POS 對帳時間容忍可在 App 調整（預設 120 分鐘）。
 
@@ -21,6 +22,11 @@ POS 對帳時間容忍可在 App 調整（預設 120 分鐘）。
 - `HotcakeBills_Topup`：區間內（依結帳操作時間）儲值金現金明細
 - `TimeMismatch_Hotcake`：Hotcake 服務開始時間找不到 POS 對應（超過時間容忍）
 - `TimeMismatch_POS`：POS 建立時間找不到 Hotcake 對應（超過時間容忍）
+- `MismatchSummary_Day`：依日期彙總的未匹配筆數與金額
+- `MismatchSummary_Designer`：依設計師彙總的未匹配筆數與金額
+- `CardMachine_Transactions`：刷卡機交易明細（依交易時間區間）
+- `CardMachine_Match`：刷卡機交易與 Hotcake 對帳成功明細（信用卡/Line Pay）
+- `CardMachine_Mismatch`：刷卡機或 Hotcake 未匹配明細（信用卡/Line Pay）
 
 ## 本機啟動（macOS）
 ```bash

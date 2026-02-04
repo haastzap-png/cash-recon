@@ -5,7 +5,6 @@ from io import BytesIO
 import os
 from typing import Optional
 
-import openpyxl
 import streamlit as st
 
 from cash_recon.detect import detect_xlsx_kind
@@ -13,11 +12,9 @@ from cash_recon.logic import build_cash_recon
 from cash_recon.models import Period
 from cash_recon.parse import (
     load_hotcake_bills_xlsx,
-    load_hotcake_bills_xlsx_with_mapping,
     load_hotcake_orders_xlsx,
-    load_hotcake_orders_xlsx_with_mapping,
+    load_card_machine_xlsx,
     load_pos_history_orders_xlsx,
-    load_pos_history_orders_xlsx_with_mapping,
 )
 from cash_recon.report import build_cash_recon_workbook
 
@@ -52,34 +49,6 @@ def _require_passcode():
     if code != passcode:
         st.error("通關碼不正確")
         st.stop()
-
-
-def _get_headers(xlsx_bytes: bytes, header_row: int = 1, sheet_name: Optional[str] = None) -> tuple[list[str], str]:
-    wb = openpyxl.load_workbook(BytesIO(xlsx_bytes), data_only=True, read_only=True)
-    sheet = sheet_name if sheet_name in wb.sheetnames else wb.sheetnames[0]
-    ws = wb[sheet]
-    max_col = min(ws.max_column, 200)
-    headers = [ws.cell(header_row, c).value for c in range(1, max_col + 1)]
-    headers = [("" if h is None else str(h)) for h in headers]
-    return headers, sheet
-
-
-def _header_options(headers: list[str]) -> list[tuple[str, int]]:
-    options: list[tuple[str, int]] = []
-    for i, h in enumerate(headers, start=1):
-        label = f"第{i}欄 - {h}" if h else f"第{i}欄 - (空白)"
-        options.append((label, i))
-    return options
-
-
-def _default_index(headers: list[str], candidates: list[str]) -> int:
-    norm = lambda s: s.replace(" ", "").replace("\u3000", "").lower()
-    header_norm = [norm(h) for h in headers]
-    for c in candidates:
-        cn = norm(c)
-        if cn in header_norm:
-            return header_norm.index(cn)
-    return 0
 
 
 def _reset_app():
@@ -127,6 +96,11 @@ uploads = st.file_uploader(
     accept_multiple_files=True,
     key=f"uploads_{st.session_state['upload_key']}",
 )
+card_machine_up = st.file_uploader(
+    "智慧刷卡機交易紀錄（可選）",
+    type=["xlsx"],
+    key=f"card_{st.session_state['upload_key']}",
+)
 
 hotcake_bills_up = None
 hotcake_orders_up = None
@@ -161,79 +135,6 @@ if uploads:
         elif kind == "pos_orders" and pos_orders_up is None:
             pos_orders_up = up
 
-    st.subheader("進階設定（欄位變動時使用）")
-    with st.expander("手動欄位對應"):
-        manual_orders = st.checkbox("手動欄位對應：Hotcake 訂單/預約報表", value=False)
-        manual_bills = st.checkbox("手動欄位對應：Hotcake 帳單紀錄", value=False)
-        manual_pos = st.checkbox("手動欄位對應：收銀機 歷史訂單", value=False) if pos_orders_up else False
-
-        if manual_orders and hotcake_orders_up:
-            headers, sheet_name = _get_headers(hotcake_orders_up.getvalue(), header_row=1, sheet_name="訂單報表")
-            opts = _header_options(headers)
-            def _pick(label, candidates):
-                idx = _default_index(headers, candidates)
-                return st.selectbox(label, options=opts, format_func=lambda x: x[0], index=idx, key=f"o_{label}")[1]
-            st.session_state["orders_mapping"] = {
-                "order_id": _pick("訂單編號", ["訂單編號"]),
-                "service_start": _pick("日期時間/服務開始", ["日期時間", "服務開始時間", "開始時間"]),
-                "store": _pick("分店", ["分店", "門市", "店別"]),
-                "designer": _pick("設計師/師傅", ["設計師", "師傅", "服務人員"]),
-                "service": _pick("服務/項目", ["服務", "服務項目", "項目"]),
-                "status": _pick("訂單狀態", ["訂單狀態", "狀態"]),
-                "checkin_time": _pick("報到/取消時間", ["報到/取消時間", "報到取消時間"]),
-                "member_name": _pick("會員姓名", ["會員姓名", "姓名"]),
-                "phone": _pick("手機號碼", ["手機號碼", "電話號碼", "手機", "電話"]),
-                "bill_id": _pick("帳單編號", ["帳單編號"]),
-                "bill_amount": _pick("帳單金額", ["帳單金額", "結帳金額"]),
-            }
-            st.session_state["orders_sheet"] = sheet_name
-        if not manual_orders:
-            st.session_state.pop("orders_mapping", None)
-            st.session_state.pop("orders_sheet", None)
-
-        if manual_bills and hotcake_bills_up:
-            headers, _ = _get_headers(hotcake_bills_up.getvalue(), header_row=1, sheet_name="服務")
-            opts = _header_options(headers)
-            def _pick_b(label, candidates):
-                idx = _default_index(headers, candidates)
-                return st.selectbox(label, options=opts, format_func=lambda x: x[0], index=idx, key=f"b_{label}")[1]
-            st.session_state["bills_mapping"] = {
-                "bill_id": _pick_b("帳單編號", ["帳單編號"]),
-                "settlement_time": _pick_b("結帳操作時間", ["結帳操作時間", "結帳時間", "操作時間"]),
-                "attributed_date": _pick_b("計算歸屬日", ["計算歸屬日", "歸屬日"]),
-                "store": _pick_b("分店", ["分店", "門市", "店別"]),
-                "designer": _pick_b("設計師/師傅", ["設計師", "師傅", "服務人員"]),
-                "item": _pick_b("項目", ["項目", "服務項目", "商品名稱"]),
-                "cash": _pick_b("現金", ["現金", "現金支付", "現金收款"]),
-                "bill_amount": _pick_b("結帳金額", ["結帳金額", "帳單金額"]),
-            }
-        if not manual_bills:
-            st.session_state.pop("bills_mapping", None)
-
-        if manual_pos and pos_orders_up:
-            header_row = st.number_input("收銀機表頭列(預設 3)", min_value=1, max_value=10, value=3)
-            headers, sheet_name = _get_headers(pos_orders_up.getvalue(), header_row=header_row, sheet_name=None)
-            opts = _header_options(headers)
-            def _pick_p(label, candidates):
-                idx = _default_index(headers, candidates)
-                return st.selectbox(label, options=opts, format_func=lambda x: x[0], index=idx, key=f"p_{label}")[1]
-            st.session_state["pos_mapping"] = {
-                "product_name": _pick_p("商品名稱", ["商品名稱", "品項", "項目"]),
-                "created_time": _pick_p("建立時間", ["建立時間", "建立日期時間", "時間"]),
-                "terminal_name": _pick_p("機台名稱", ["機台名稱", "門市", "店別"]),
-                "order_amount": _pick_p("訂單金額", ["訂單金額", "應收金額", "金額"]),
-                "cash_paid": _pick_p("現金支付", ["現金支付", "現金"]),
-                "pay_status": _pick_p("付款狀態", ["付款狀態", "支付狀態"]),
-                "order_status": _pick_p("訂單狀態", ["訂單狀態", "狀態"]),
-                "pay_method": _pick_p("付款方式", ["付款方式", "支付方式"]),
-            }
-            st.session_state["pos_sheet"] = sheet_name
-            st.session_state["pos_header_row"] = header_row
-        if not manual_pos:
-            st.session_state.pop("pos_mapping", None)
-            st.session_state.pop("pos_sheet", None)
-            st.session_state.pop("pos_header_row", None)
-
 if not uploads:
     st.info("請先上傳檔案。至少需要 Hotcake：帳單紀錄 + 訂單/預約報表。")
 
@@ -254,42 +155,16 @@ if run:
         bills_bytes = hotcake_bills_up.getvalue()
         orders_bytes = hotcake_orders_up.getvalue()
         pos_bytes = pos_orders_up.getvalue() if pos_orders_up else None
+        card_bytes = card_machine_up.getvalue() if card_machine_up else None
 
         try:
-            if st.session_state.get("orders_mapping"):
-                orders = load_hotcake_orders_xlsx_with_mapping(
-                    orders_bytes,
-                    sheet_name=st.session_state.get("orders_sheet"),
-                    mapping=st.session_state["orders_mapping"],
-                )
-            else:
-                orders = load_hotcake_orders_xlsx(orders_bytes)
-
-            if st.session_state.get("bills_mapping"):
-                bills = load_hotcake_bills_xlsx_with_mapping(
-                    bills_bytes,
-                    service_sheet="服務",
-                    topup_sheet="儲值金",
-                    mapping=st.session_state["bills_mapping"],
-                )
-            else:
-                bills = load_hotcake_bills_xlsx(bills_bytes)
-
-            if pos_bytes:
-                if st.session_state.get("pos_mapping"):
-                    pos_orders = load_pos_history_orders_xlsx_with_mapping(
-                        pos_bytes,
-                        sheet_name=st.session_state.get("pos_sheet"),
-                        header_row=st.session_state.get("pos_header_row", 3),
-                        mapping=st.session_state["pos_mapping"],
-                    )
-                else:
-                    pos_orders = load_pos_history_orders_xlsx(pos_bytes)
-            else:
-                pos_orders = None
+            orders = load_hotcake_orders_xlsx(orders_bytes)
+            bills = load_hotcake_bills_xlsx(bills_bytes)
+            pos_orders = load_pos_history_orders_xlsx(pos_bytes) if pos_bytes else None
+            card_rows = load_card_machine_xlsx(card_bytes) if card_bytes else None
         except Exception as e:
             st.error(f"讀取報表失敗：{e}")
-            st.info("若表頭有變動，請展開「進階設定」→「手動欄位對應」後再試。")
+            st.info("若表頭有變動，請更新 GitHub 版本後再試。")
             st.stop()
 
     with st.spinner("計算中..."):
@@ -299,6 +174,7 @@ if run:
             orders=orders,
             bills=bills,
             pos_orders=pos_orders,
+            card_machine_rows=card_rows,
             topup_mode=topup_mode,
             time_tolerance_minutes=int(time_tolerance),
         )
@@ -337,6 +213,11 @@ if run:
 
     if result.totals.pos_cash_diff is not None:
         st.info(f"收銀機現金 - Hotcake 現金合計：{result.totals.pos_cash_diff:,.0f}")
+    if result.totals.card_machine_total is not None:
+        st.info(f"刷卡機實付合計：{result.totals.card_machine_total:,.0f}")
+        card_mis_card = len([r for r in result.card_mismatches if r.source == "card"])
+        card_mis_hotcake = len([r for r in result.card_mismatches if r.source == "hotcake"])
+        st.info(f"刷卡機未匹配(卡機)：{card_mis_card} ；刷卡機未匹配(Hotcake)：{card_mis_hotcake}")
 
     if pos_orders is not None:
         st.subheader("時間容忍外的資料")
@@ -356,8 +237,10 @@ if run:
                         "帳單編號": r.bill_id,
                         "帳單金額": r.bill_amount,
                         "現金": r.cash,
+                        "現金差額": r.cash_diff,
                         "最近POS時間": r.nearest_pos_time.strftime("%Y-%m-%d %H:%M:%S") if r.nearest_pos_time else "",
                         "時間差(分)": r.nearest_diff_minutes,
+                        "原因": r.reason,
                     }
                     for r in result.hotcake_time_mismatches
                 ],
@@ -373,8 +256,10 @@ if run:
                         "商品名稱": r.product_name,
                         "分鐘": r.minutes,
                         "現金支付": r.cash_paid,
+                        "現金差額": r.cash_diff,
                         "最近Hotcake時間": r.nearest_hotcake_time.strftime("%Y-%m-%d %H:%M:%S") if r.nearest_hotcake_time else "",
                         "時間差(分)": r.nearest_diff_minutes,
+                        "原因": r.reason,
                     }
                     for r in result.pos_time_mismatches
                 ],

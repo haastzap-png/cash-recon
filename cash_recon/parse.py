@@ -250,6 +250,8 @@ class BillRow:
     designer: str
     item: str
     cash: float
+    credit_card: float
+    linepay: float
     bill_amount: float
 
 
@@ -264,6 +266,8 @@ def _load_hotcake_bill_sheet(ws: openpyxl.worksheet.worksheet.Worksheet) -> list
     designer_col = _find_first(indices, ["設計師", "師傅", "服務人員"])
     item_col = _find_first(indices, ["項目", "服務項目", "商品名稱"])
     cash_col = _find_first(indices, ["現金", "現金支付", "現金收款"])
+    credit_col = _find_first(indices, ["信用卡", "刷卡"])
+    linepay_col = _find_first(indices, ["Linepay", "Line Pay", "LinePay", "LINEPAY", "LINE PAY", "linepay", "line pay"])
     amount_col = _find_first(indices, ["結帳金額", "帳單金額", "應收金額"])
 
     missing_cols = [
@@ -293,6 +297,8 @@ def _load_hotcake_bill_sheet(ws: openpyxl.worksheet.worksheet.Worksheet) -> list
         designer = _to_str(ws.cell(r, designer_col).value)
         item = _to_str(ws.cell(r, item_col).value)
         cash = _to_float(ws.cell(r, cash_col).value)
+        credit_card = _to_float(ws.cell(r, credit_col).value) if credit_col else 0.0
+        linepay = _to_float(ws.cell(r, linepay_col).value) if linepay_col else 0.0
         bill_amount = _to_float(ws.cell(r, amount_col).value)
         rows.append(
             BillRow(
@@ -303,6 +309,8 @@ def _load_hotcake_bill_sheet(ws: openpyxl.worksheet.worksheet.Worksheet) -> list
                 designer=designer,
                 item=item,
                 cash=cash,
+                credit_card=credit_card,
+                linepay=linepay,
                 bill_amount=bill_amount,
             )
         )
@@ -342,6 +350,8 @@ def load_hotcake_bills_xlsx_with_mapping(
             designer = _to_str(ws.cell(r, mapping["designer"]).value)
             item = _to_str(ws.cell(r, mapping["item"]).value)
             cash = _to_float(ws.cell(r, mapping["cash"]).value)
+            credit_card = _to_float(ws.cell(r, mapping.get("credit_card", 0)).value) if mapping.get("credit_card") else 0.0
+            linepay = _to_float(ws.cell(r, mapping.get("linepay", 0)).value) if mapping.get("linepay") else 0.0
             bill_amount = _to_float(ws.cell(r, mapping["bill_amount"]).value)
             rows.append(
                 BillRow(
@@ -352,6 +362,8 @@ def load_hotcake_bills_xlsx_with_mapping(
                     designer=designer,
                     item=item,
                     cash=cash,
+                    credit_card=credit_card,
+                    linepay=linepay,
                     bill_amount=bill_amount,
                 )
             )
@@ -480,6 +492,74 @@ def load_pos_history_orders_xlsx(source: XlsxSource) -> list[PosRow]:
                 cash_paid=cash_paid,
                 pay_status=pay_status,
                 order_status=order_status,
+                pay_method=pay_method,
+            )
+        )
+    return rows
+
+
+@dataclass(frozen=True)
+class CardMachineRow:
+    order_id: str
+    store: str
+    device_name: str
+    amount: float
+    paid_amount: float
+    transaction_time: datetime
+    pay_method: str
+
+
+def load_card_machine_xlsx(source: XlsxSource) -> list[CardMachineRow]:
+    wb = _load_workbook(source, data_only=True)
+    ws = wb[wb.sheetnames[0]]
+
+    # Header is at row 2 in current exports
+    header_row = 2
+    header = [ws.cell(header_row, c).value for c in range(1, ws.max_column + 1)]
+    indices = _build_index(header)
+
+    order_col = _find_first(indices, ["訂單編號"])
+    store_col = _find_first(indices, ["店鋪名稱", "分店", "門市", "店別"])
+    device_col = _find_first(indices, ["設備名稱", "機台名稱"])
+    amount_col = _find_first(indices, ["交易金額", "金額"])
+    paid_col = _find_first(indices, ["實付金額"])
+    time_col = _find_first(indices, ["交易時間", "時間"])
+    method_col = _find_first(indices, ["支付方式", "付款方式"])
+
+    missing_cols = [
+        ("訂單編號", order_col),
+        ("店鋪名稱", store_col),
+        ("設備名稱", device_col),
+        ("交易金額", amount_col),
+        ("實付金額", paid_col),
+        ("交易時間", time_col),
+        ("支付方式", method_col),
+    ]
+    missing = [name for name, col in missing_cols if col is None]
+    if missing:
+        raise ValueError(f"智慧刷卡機交易紀錄缺少欄位: {missing}")
+
+    rows: list[CardMachineRow] = []
+    for r in range(header_row + 1, ws.max_row + 1):
+        order_id = _to_str(ws.cell(r, order_col).value)
+        if not order_id:
+            continue
+        store = _to_str(ws.cell(r, store_col).value)
+        device_name = _to_str(ws.cell(r, device_col).value)
+        amount = _to_float(ws.cell(r, amount_col).value)
+        paid_amount = _to_float(ws.cell(r, paid_col).value)
+        transaction_time = _parse_datetime(ws.cell(r, time_col).value)
+        if transaction_time is None:
+            continue
+        pay_method = _to_str(ws.cell(r, method_col).value)
+        rows.append(
+            CardMachineRow(
+                order_id=order_id,
+                store=store,
+                device_name=device_name,
+                amount=amount,
+                paid_amount=paid_amount,
+                transaction_time=transaction_time,
                 pay_method=pay_method,
             )
         )
