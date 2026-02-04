@@ -121,6 +121,59 @@ class OrdersRow:
     phone: str
 
 
+def _load_hotcake_orders_with_columns(ws, columns: dict[str, int], order_code_col: Optional[int]) -> list[OrdersRow]:
+    rows: list[OrdersRow] = []
+    for r in range(2, ws.max_row + 1):
+        order_id = _to_str(ws.cell(r, columns["order_id"]).value)
+        if not order_id:
+            continue
+        service_start = _parse_datetime(ws.cell(r, columns["service_start"]).value)
+        if service_start is None:
+            continue
+        store = _to_str(ws.cell(r, columns["store"]).value)
+        designer = _to_str(ws.cell(r, columns["designer"]).value)
+        service = _to_str(ws.cell(r, columns["service"]).value)
+        order_status = _to_str(ws.cell(r, columns["status"]).value)
+        checkin_time = _parse_datetime(ws.cell(r, columns["checkin_time"]).value)
+        member_name = _to_str(ws.cell(r, columns["member_name"]).value)
+        phone = _to_str(ws.cell(r, columns["phone"]).value)
+        bill_id = _to_str(ws.cell(r, columns["bill_id"]).value)
+        bill_amount = _to_float(ws.cell(r, columns["bill_amount"]).value)
+        order_code = ""
+        if order_code_col is not None:
+            order_code = _to_str(ws.cell(r, order_code_col).value)
+
+        rows.append(
+            OrdersRow(
+                order_id=order_id,
+                order_code=order_code,
+                service_start=service_start,
+                store=store,
+                designer=designer,
+                service=service,
+                order_status=order_status,
+                checkin_time=checkin_time,
+                bill_id=bill_id,
+                bill_amount=bill_amount,
+                member_name=member_name,
+                phone=phone,
+            )
+        )
+    return rows
+
+
+def load_hotcake_orders_xlsx_with_mapping(
+    source: XlsxSource,
+    *,
+    sheet_name: Optional[str],
+    mapping: dict[str, int],
+    order_code_col: Optional[int] = None,
+) -> list[OrdersRow]:
+    wb = _load_workbook(source, data_only=True)
+    ws = wb[sheet_name] if sheet_name and sheet_name in wb.sheetnames else wb[wb.sheetnames[0]]
+    return _load_hotcake_orders_with_columns(ws, mapping, order_code_col)
+
+
 def load_hotcake_orders_xlsx(source: XlsxSource) -> list[OrdersRow]:
     wb = _load_workbook(source, data_only=True)
     if "訂單報表" in wb.sheetnames:
@@ -172,44 +225,20 @@ def load_hotcake_orders_xlsx(source: XlsxSource) -> list[OrdersRow]:
                 order_code_col = i
                 break
 
-    rows: list[OrdersRow] = []
-    for r in range(2, ws.max_row + 1):
-        order_id = _to_str(ws.cell(r, order_id_col).value)
-        if not order_id:
-            continue
-        service_start = _parse_datetime(ws.cell(r, service_start_col).value)
-        if service_start is None:
-            continue
-        store = _to_str(ws.cell(r, store_col).value)
-        designer = _to_str(ws.cell(r, designer_col).value)
-        service = _to_str(ws.cell(r, service_col).value)
-        order_status = _to_str(ws.cell(r, status_col).value)
-        checkin_time = _parse_datetime(ws.cell(r, checkin_col).value)
-        member_name = _to_str(ws.cell(r, member_name_col).value)
-        phone = _to_str(ws.cell(r, phone_col).value)
-        bill_id = _to_str(ws.cell(r, bill_id_col).value)
-        bill_amount = _to_float(ws.cell(r, bill_amount_col).value)
-        order_code = ""
-        if order_code_col is not None:
-            order_code = _to_str(ws.cell(r, order_code_col).value)
-
-        rows.append(
-            OrdersRow(
-                order_id=order_id,
-                order_code=order_code,
-                service_start=service_start,
-                store=store,
-                designer=designer,
-                service=service,
-                order_status=order_status,
-                checkin_time=checkin_time,
-                bill_id=bill_id,
-                bill_amount=bill_amount,
-                member_name=member_name,
-                phone=phone,
-            )
-        )
-    return rows
+    columns = {
+        "order_id": order_id_col,
+        "service_start": service_start_col,
+        "store": store_col,
+        "designer": designer_col,
+        "service": service_col,
+        "status": status_col,
+        "checkin_time": checkin_col,
+        "member_name": member_name_col,
+        "phone": phone_col,
+        "bill_id": bill_id_col,
+        "bill_amount": bill_amount_col,
+    }
+    return _load_hotcake_orders_with_columns(ws, columns, order_code_col)
 
 
 @dataclass(frozen=True)
@@ -282,8 +311,55 @@ def _load_hotcake_bill_sheet(ws: openpyxl.worksheet.worksheet.Worksheet) -> list
 
 @dataclass(frozen=True)
 class HotcakeBills:
-    service: dict[str, BillRow]
-    topup: dict[str, BillRow]
+    service: list[BillRow]
+    topup: list[BillRow]
+
+
+def load_hotcake_bills_xlsx_with_mapping(
+    source: XlsxSource,
+    *,
+    service_sheet: str,
+    topup_sheet: str,
+    mapping: dict[str, int],
+) -> HotcakeBills:
+    wb = _load_workbook(source, data_only=True)
+    if service_sheet not in wb.sheetnames:
+        raise ValueError(f"找不到分頁：{service_sheet}")
+    if topup_sheet not in wb.sheetnames:
+        raise ValueError(f"找不到分頁：{topup_sheet}")
+
+    def _load_with_mapping(ws):
+        rows: list[BillRow] = []
+        for r in range(2, ws.max_row + 1):
+            bill_id = _to_str(ws.cell(r, mapping["bill_id"]).value)
+            if not bill_id:
+                continue
+            settlement_time = _parse_datetime(ws.cell(r, mapping["settlement_time"]).value)
+            attributed_date = _parse_date(ws.cell(r, mapping["attributed_date"]).value)
+            if settlement_time is None or attributed_date is None:
+                continue
+            store = _to_str(ws.cell(r, mapping["store"]).value)
+            designer = _to_str(ws.cell(r, mapping["designer"]).value)
+            item = _to_str(ws.cell(r, mapping["item"]).value)
+            cash = _to_float(ws.cell(r, mapping["cash"]).value)
+            bill_amount = _to_float(ws.cell(r, mapping["bill_amount"]).value)
+            rows.append(
+                BillRow(
+                    bill_id=bill_id,
+                    settlement_time=settlement_time,
+                    attributed_date=attributed_date,
+                    store=store,
+                    designer=designer,
+                    item=item,
+                    cash=cash,
+                    bill_amount=bill_amount,
+                )
+            )
+        return rows
+
+    service_rows = _load_with_mapping(wb[service_sheet])
+    topup_rows = _load_with_mapping(wb[topup_sheet])
+    return HotcakeBills(service=service_rows, topup=topup_rows)
 
 
 def load_hotcake_bills_xlsx(source: XlsxSource) -> HotcakeBills:
@@ -296,9 +372,7 @@ def load_hotcake_bills_xlsx(source: XlsxSource) -> HotcakeBills:
     service_rows = _load_hotcake_bill_sheet(wb["服務"])
     topup_rows = _load_hotcake_bill_sheet(wb["儲值金"])
 
-    service = {r.bill_id: r for r in service_rows}
-    topup = {r.bill_id: r for r in topup_rows}
-    return HotcakeBills(service=service, topup=topup)
+    return HotcakeBills(service=service_rows, topup=topup_rows)
 
 
 @dataclass(frozen=True)
@@ -311,6 +385,44 @@ class PosRow:
     pay_status: str
     order_status: str
     pay_method: str
+
+
+def load_pos_history_orders_xlsx_with_mapping(
+    source: XlsxSource,
+    *,
+    sheet_name: Optional[str],
+    header_row: int,
+    mapping: dict[str, int],
+) -> list[PosRow]:
+    wb = _load_workbook(source, data_only=True)
+    ws = wb[sheet_name] if sheet_name and sheet_name in wb.sheetnames else wb[wb.sheetnames[0]]
+    rows: list[PosRow] = []
+    for r in range(header_row + 1, ws.max_row + 1):
+        product_name = _to_str(ws.cell(r, mapping["product_name"]).value)
+        if not product_name:
+            continue
+        created_time = _parse_datetime(ws.cell(r, mapping["created_time"]).value)
+        if created_time is None:
+            continue
+        terminal_name = _to_str(ws.cell(r, mapping["terminal_name"]).value)
+        order_amount = _to_float(ws.cell(r, mapping["order_amount"]).value)
+        cash_paid = _to_float(ws.cell(r, mapping["cash_paid"]).value)
+        pay_status = _to_str(ws.cell(r, mapping["pay_status"]).value)
+        order_status = _to_str(ws.cell(r, mapping["order_status"]).value)
+        pay_method = _to_str(ws.cell(r, mapping["pay_method"]).value)
+        rows.append(
+            PosRow(
+                product_name=product_name,
+                created_time=created_time,
+                terminal_name=terminal_name,
+                order_amount=order_amount,
+                cash_paid=cash_paid,
+                pay_status=pay_status,
+                order_status=order_status,
+                pay_method=pay_method,
+            )
+        )
+    return rows
 
 
 def load_pos_history_orders_xlsx(source: XlsxSource) -> list[PosRow]:

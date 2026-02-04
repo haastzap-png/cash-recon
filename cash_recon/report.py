@@ -83,8 +83,25 @@ def build_cash_recon_workbook(result: CashReconResult) -> openpyxl.Workbook:
     ws["B15"] = result.totals.pos_cash_diff if result.totals.pos_cash_diff is not None else ""
     if result.totals.pos_cash_diff is not None:
         _money(ws, "B15")
+    ws["A16"] = "時間容忍外(Hotcake)筆數"
+    ws["B16"] = len(result.hotcake_time_mismatches)
+    ws["A17"] = "時間容忍外(POS)筆數"
+    ws["B17"] = len(result.pos_time_mismatches)
 
-    for cell in ("A3", "A4", "A5", "A7", "A8", "A10", "A11", "A12", "A14", "A15"):
+    for cell in (
+        "A3",
+        "A4",
+        "A5",
+        "A7",
+        "A8",
+        "A10",
+        "A11",
+        "A12",
+        "A14",
+        "A15",
+        "A16",
+        "A17",
+    ):
         ws[cell].font = header_font
     ws["A1"].alignment = Alignment(horizontal="left")
     _auto_width(ws)
@@ -172,6 +189,80 @@ def build_cash_recon_workbook(result: CashReconResult) -> openpyxl.Workbook:
         for cell in row:
             cell.number_format = "#,##0"
     _auto_width(ws_topup)
+
+    ws_hm = wb.create_sheet("TimeMismatch_Hotcake")
+    ws_hm.append(
+        [
+            "分店",
+            "日期(服務開始)",
+            "日期時間(服務開始)",
+            "設計師",
+            "服務",
+            "分鐘",
+            "帳單編號",
+            "帳單金額",
+            "現金",
+            "最近POS時間",
+            "時間差(分鐘)",
+        ]
+    )
+    for c in range(1, 12):
+        ws_hm.cell(1, c).font = header_font
+    for r in result.hotcake_time_mismatches:
+        ws_hm.append(
+            [
+                r.store,
+                r.service_start.strftime("%Y-%m-%d"),
+                _fmt_dt(r.service_start),
+                r.designer,
+                r.service,
+                r.minutes if r.minutes is not None else "",
+                r.bill_id,
+                r.bill_amount,
+                r.cash,
+                _fmt_dt(r.nearest_pos_time),
+                r.nearest_diff_minutes if r.nearest_diff_minutes is not None else "",
+            ]
+        )
+    for row in ws_hm.iter_rows(min_row=2, min_col=8, max_col=9):
+        for cell in row:
+            cell.number_format = "#,##0"
+    _auto_width(ws_hm)
+
+    ws_pm = wb.create_sheet("TimeMismatch_POS")
+    ws_pm.append(
+        [
+            "機台名稱",
+            "日期(建立時間)",
+            "日期時間(建立時間)",
+            "設計師",
+            "商品名稱",
+            "分鐘",
+            "現金支付",
+            "最近Hotcake時間",
+            "時間差(分鐘)",
+        ]
+    )
+    for c in range(1, 10):
+        ws_pm.cell(1, c).font = header_font
+    for r in result.pos_time_mismatches:
+        ws_pm.append(
+            [
+                r.terminal_name,
+                r.created_time.strftime("%Y-%m-%d"),
+                _fmt_dt(r.created_time),
+                r.designer,
+                r.product_name,
+                r.minutes if r.minutes is not None else "",
+                r.cash_paid,
+                _fmt_dt(r.nearest_hotcake_time),
+                r.nearest_diff_minutes if r.nearest_diff_minutes is not None else "",
+            ]
+        )
+    for row in ws_pm.iter_rows(min_row=2, min_col=7, max_col=7):
+        for cell in row:
+            cell.number_format = "#,##0"
+    _auto_width(ws_pm)
 
     return wb
 

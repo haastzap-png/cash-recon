@@ -57,3 +57,28 @@ class TopUpBillRow:
     cash: float
     bill_amount: float
 
+
+@dataclass(frozen=True)
+class HotcakeTimeMismatchRow:
+    store: str
+    service_start: datetime
+    designer: str
+    service: str
+    minutes: Optional[int]
+    bill_id: str
+    bill_amount: float
+    cash: float
+    nearest_pos_time: Optional[datetime]
+    nearest_diff_minutes: Optional[int]
+
+
+@dataclass(frozen=True)
+class PosTimeMismatchRow:
+    terminal_name: str
+    created_time: datetime
+    designer: str
+    product_name: str
+    minutes: Optional[int]
+    cash_paid: float
+    nearest_hotcake_time: Optional[datetime]
+    nearest_diff_minutes: Optional[int]

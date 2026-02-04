@@ -10,16 +10,22 @@
 - 收銀機：歷史訂單（選配；上傳後會核對現金是否一致）
 
 系統會嘗試自動辨識檔案類型，並對欄位標題做容錯（例如去空白/同義欄名）。
+若平台改了表頭，可在 App 的「進階設定」手動指定欄位。
+分店建議從下拉選單選擇（中壢三光店、桃園中平店、楊梅四維店、中壢體育園區店），避免名稱不一致。
+POS 對帳時間容忍可在 App 調整（預設 120 分鐘）。
 
 ## 輸出（現金對帳表 xlsx）
 - `Summary`：區間、Hotcake 現金合計、（若有）收銀機現金合計、差額、漏結帳筆數與可否視為正確對帳
 - `MissingBills`：已報到但帳單金額空/無帳單編號的明細（店、日期、師傅、訂單）
 - `HotcakeBills_Service`：區間內（依訂單日期時間）對應到的帳單現金明細
 - `HotcakeBills_Topup`：區間內（依結帳操作時間）儲值金現金明細
+- `TimeMismatch_Hotcake`：Hotcake 服務開始時間找不到 POS 對應（超過時間容忍）
+- `TimeMismatch_POS`：POS 建立時間找不到 Hotcake 對應（超過時間容忍）
 
 ## 本機啟動（macOS）
 ```bash
 python3 -m pip install -r requirements.txt
+export APP_PASSCODE=your_passcode
 python3 -m streamlit run app.py
 ```
 
@@ -42,6 +48,13 @@ python3 -m cash_recon.cli \
 1. 把此資料夾推到 GitHub（公有 repo 最方便分享連結）。
 2. 到 Streamlit Community Cloud 建立新 App，選 repo 與 `app.py` 作為入口。
 3. Deploy（會自動用 `requirements.txt` 安裝套件）。
+
+### 通關碼（必設）
+在 Streamlit Cloud 的 App 設定中加入 Secrets：
+```
+passcode = "your_passcode"
+```
+使用者進入 App 需輸入通關碼才能使用。
 
 ### 其他平台
 - Cloud Run / Render 等也能跑（可用本專案的 `Dockerfile`），啟動命令：

@@ -27,6 +27,13 @@ def main() -> int:
     p.add_argument("--hotcake-bills", required=True, type=Path)
     p.add_argument("--hotcake-orders", required=True, type=Path)
     p.add_argument("--pos-orders", type=Path, default=None)
+    p.add_argument(
+        "--topup-mode",
+        choices=["settlement_time", "exclude"],
+        default="settlement_time",
+        help="儲值金計入方式：settlement_time=依結帳操作時間計入；exclude=不計入",
+    )
+    p.add_argument("--time-tolerance", type=int, default=120, help="POS 對帳時間容忍（分鐘）")
     p.add_argument("--out", type=Path, default=Path("output/spreadsheet/cash_recon.xlsx"))
     args = p.parse_args()
 
@@ -35,7 +42,15 @@ def main() -> int:
     bills = load_hotcake_bills_xlsx(args.hotcake_bills)
     pos_orders = load_pos_history_orders_xlsx(args.pos_orders) if args.pos_orders else None
 
-    result = build_cash_recon(period=period, store=args.store, orders=orders, bills=bills, pos_orders=pos_orders)
+    result = build_cash_recon(
+        period=period,
+        store=args.store,
+        orders=orders,
+        bills=bills,
+        pos_orders=pos_orders,
+        topup_mode=args.topup_mode,
+        time_tolerance_minutes=args.time_tolerance,
+    )
     save_cash_recon_report(result, args.out)
     print(args.out)
     if result.missing_bills:
