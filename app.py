@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import BytesIO
 import inspect
 
@@ -16,6 +16,22 @@ try:
 except ImportError:
     load_card_machine_xlsx = None
 from cash_recon.report import build_cash_recon_workbook
+
+
+def _default_previous_month_period() -> tuple[datetime, datetime]:
+    first_day_this_month = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    last_day_previous_month = first_day_this_month - timedelta(days=1)
+    period_start = last_day_previous_month.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    period_end = last_day_previous_month.replace(hour=23, minute=59, second=0, microsecond=0)
+    return period_start, period_end
+
+
+def _default_current_month_period() -> tuple[datetime, datetime]:
+    first_day_this_month = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    first_day_next_month = (first_day_this_month + timedelta(days=32)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    period_start = first_day_this_month
+    period_end = first_day_next_month - timedelta(minutes=1)
+    return period_start, period_end
 
 
 def _reset_app():
@@ -67,12 +83,33 @@ with st.sidebar:
         store = store_choice
 
     st.caption("區間時間可直接手動輸入，或點選日曆/時間")
-    default_start = datetime(2026, 1, 1, 0, 0)
-    default_end = datetime(2026, 1, 31, 23, 59)
-    start_date = st.date_input("區間開始日期", value=default_start.date())
-    start_time = st.time_input("區間開始時間", value=default_start.time(), step=60)
-    end_date = st.date_input("區間結束日期", value=default_end.date())
-    end_time = st.time_input("區間結束時間", value=default_end.time(), step=60)
+    if "start_date" not in st.session_state:
+        default_start, default_end = _default_previous_month_period()
+        st.session_state["start_date"] = default_start.date()
+        st.session_state["start_time"] = default_start.time()
+        st.session_state["end_date"] = default_end.date()
+        st.session_state["end_time"] = default_end.time()
+
+    c_quick_1, c_quick_2 = st.columns(2)
+    if c_quick_1.button("上個月", use_container_width=True):
+        start_dt_quick, end_dt_quick = _default_previous_month_period()
+        st.session_state["start_date"] = start_dt_quick.date()
+        st.session_state["start_time"] = start_dt_quick.time()
+        st.session_state["end_date"] = end_dt_quick.date()
+        st.session_state["end_time"] = end_dt_quick.time()
+        st.rerun()
+    if c_quick_2.button("本月", use_container_width=True):
+        start_dt_quick, end_dt_quick = _default_current_month_period()
+        st.session_state["start_date"] = start_dt_quick.date()
+        st.session_state["start_time"] = start_dt_quick.time()
+        st.session_state["end_date"] = end_dt_quick.date()
+        st.session_state["end_time"] = end_dt_quick.time()
+        st.rerun()
+
+    start_date = st.date_input("區間開始日期", key="start_date")
+    start_time = st.time_input("區間開始時間", key="start_time", step=60)
+    end_date = st.date_input("區間結束日期", key="end_date")
+    end_time = st.time_input("區間結束時間", key="end_time", step=60)
 
     topup_mode = "settlement_time"
     st.caption("儲值金：依結帳操作時間計入")
