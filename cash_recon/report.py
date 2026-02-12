@@ -39,6 +39,56 @@ def _auto_width(ws):
         ws.column_dimensions[col_letter].width = min(max(10, max_len + 2), 45)
 
 
+def _designer_key(name: str) -> str:
+    text = (name or "").strip()
+    return text if text else "(未填寫)"
+
+
+def _build_designer_cash_summary(result: CashReconResult) -> list[dict[str, Any]]:
+    summary: dict[str, dict[str, Any]] = {}
+    for row in result.service_bill_rows:
+        key = _designer_key(row.designer)
+        current = summary.setdefault(
+            key,
+            {
+                "designer": key,
+                "service_cash": 0.0,
+                "topup_cash": 0.0,
+                "service_count": 0,
+                "topup_count": 0,
+            },
+        )
+        current["service_cash"] += row.cash
+        current["service_count"] += 1
+
+    for row in result.topup_bill_rows:
+        key = _designer_key(row.designer)
+        current = summary.setdefault(
+            key,
+            {
+                "designer": key,
+                "service_cash": 0.0,
+                "topup_cash": 0.0,
+                "service_count": 0,
+                "topup_count": 0,
+            },
+        )
+        current["topup_cash"] += row.cash
+        current["topup_count"] += 1
+
+    rows = []
+    for value in summary.values():
+        rows.append(
+            {
+                **value,
+                "total_cash": value["service_cash"] + value["topup_cash"],
+                "total_count": value["service_count"] + value["topup_count"],
+            }
+        )
+    rows.sort(key=lambda item: (-item["total_cash"], item["designer"]))
+    return rows
+
+
 def build_cash_recon_workbook(result: CashReconResult) -> openpyxl.Workbook:
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -95,6 +145,8 @@ def build_cash_recon_workbook(result: CashReconResult) -> openpyxl.Workbook:
     ws["B19"] = len([r for r in result.card_mismatches if r.source == "card"])
     ws["A20"] = "刷卡機對帳未匹配(Hotcake)"
     ws["B20"] = len([r for r in result.card_mismatches if r.source == "hotcake"])
+    ws["A22"] = "師傅現金分配"
+    ws["B22"] = "請見 CashByDesigner"
 
     for cell in (
         "A3",
@@ -112,6 +164,7 @@ def build_cash_recon_workbook(result: CashReconResult) -> openpyxl.Workbook:
         "A18",
         "A19",
         "A20",
+        "A22",
     ):
         ws[cell].font = header_font
     ws["A1"].alignment = Alignment(horizontal="left")
@@ -204,6 +257,33 @@ def build_cash_recon_workbook(result: CashReconResult) -> openpyxl.Workbook:
         for cell in row:
             cell.number_format = "#,##0"
     _auto_width(ws_topup)
+
+    ws_cash_designer = wb.create_sheet("CashByDesigner")
+    ws_cash_designer.append(
+        ["設計師", "服務現金", "儲值金現金", "現金合計", "服務筆數", "儲值筆數", "總筆數"]
+    )
+    for c in range(1, 8):
+        ws_cash_designer.cell(1, c).font = header_font
+    designer_cash_rows = _build_designer_cash_summary(result)
+    if designer_cash_rows:
+        for row in designer_cash_rows:
+            ws_cash_designer.append(
+                [
+                    row["designer"],
+                    row["service_cash"],
+                    row["topup_cash"],
+                    row["total_cash"],
+                    row["service_count"],
+                    row["topup_count"],
+                    row["total_count"],
+                ]
+            )
+    else:
+        ws_cash_designer.append(["(無資料)", 0.0, 0.0, 0.0, 0, 0, 0])
+    for row in ws_cash_designer.iter_rows(min_row=2, min_col=2, max_col=4):
+        for cell in row:
+            cell.number_format = "#,##0"
+    _auto_width(ws_cash_designer)
 
     ws_hm = wb.create_sheet("TimeMismatch_Hotcake")
     ws_hm.append(
