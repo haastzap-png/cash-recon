@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime
 from io import BytesIO
 import inspect
-from typing import Optional
 
 import streamlit as st
 
@@ -17,18 +16,6 @@ try:
 except ImportError:
     load_card_machine_xlsx = None
 from cash_recon.report import build_cash_recon_workbook
-
-
-def _parse_dt(text: str) -> Optional[datetime]:
-    text = (text or "").strip()
-    if not text:
-        return None
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
-        try:
-            return datetime.strptime(text, fmt)
-        except ValueError:
-            pass
-    return None
 
 
 def _reset_app():
@@ -79,21 +66,13 @@ with st.sidebar:
     else:
         store = store_choice
 
-    start_text_manual = st.text_input("區間開始 (YYYY-MM-DD HH:MM)", value="2026-01-01 00:00")
-    end_text_manual = st.text_input("區間結束 (YYYY-MM-DD HH:MM)", value="2026-01-31 23:59")
-    use_calendar_picker = st.checkbox("改用點選日曆/時間", value=False)
-    if use_calendar_picker:
-        default_start = _parse_dt(start_text_manual) or datetime(2026, 1, 1, 0, 0)
-        default_end = _parse_dt(end_text_manual) or datetime(2026, 1, 31, 23, 59)
-        start_date = st.date_input("區間開始日期（點選）", value=default_start.date())
-        start_time = st.time_input("區間開始時間（點選）", value=default_start.time(), step=60)
-        end_date = st.date_input("區間結束日期（點選）", value=default_end.date())
-        end_time = st.time_input("區間結束時間（點選）", value=default_end.time(), step=60)
-        start_text = f"{start_date.strftime('%Y-%m-%d')} {start_time.strftime('%H:%M')}"
-        end_text = f"{end_date.strftime('%Y-%m-%d')} {end_time.strftime('%H:%M')}"
-    else:
-        start_text = start_text_manual
-        end_text = end_text_manual
+    st.caption("區間時間可直接手動輸入，或點選日曆/時間")
+    default_start = datetime(2026, 1, 1, 0, 0)
+    default_end = datetime(2026, 1, 31, 23, 59)
+    start_date = st.date_input("區間開始日期", value=default_start.date())
+    start_time = st.time_input("區間開始時間", value=default_start.time(), step=60)
+    end_date = st.date_input("區間結束日期", value=default_end.date())
+    end_time = st.time_input("區間結束時間", value=default_end.time(), step=60)
 
     topup_mode = "settlement_time"
     st.caption("儲值金：依結帳操作時間計入")
@@ -159,10 +138,10 @@ if not uploads:
 run = st.button("產出現金對帳表", type="primary", disabled=not (hotcake_bills_up and hotcake_orders_up))
 
 if run:
-    start_dt = _parse_dt(start_text)
-    end_dt = _parse_dt(end_text)
-    if start_dt is None or end_dt is None or start_dt > end_dt:
-        st.error("區間日期時間格式不正確，請用 YYYY-MM-DD HH:MM 或 YYYY-MM-DD HH:MM:SS，且開始需早於結束。")
+    start_dt = datetime.combine(start_date, start_time)
+    end_dt = datetime.combine(end_date, end_time)
+    if start_dt > end_dt:
+        st.error("區間日期時間不正確：開始需早於結束。")
         st.stop()
 
     if not store.strip():
