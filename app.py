@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime
 from io import BytesIO
 import inspect
-import os
 from typing import Optional
 
 import streamlit as st
@@ -30,26 +29,6 @@ def _parse_dt(text: str) -> Optional[datetime]:
         except ValueError:
             pass
     return None
-
-
-def _require_passcode():
-    passcode = None
-    try:
-        passcode = st.secrets.get("passcode")
-    except Exception:
-        pass
-    passcode = passcode or os.environ.get("APP_PASSCODE")
-
-    if not passcode:
-        st.error("尚未設定通關碼。請在 Streamlit Secrets 設定 `passcode`，或在環境變數設定 `APP_PASSCODE`。")
-        st.stop()
-
-    code = st.text_input("通關碼", type="password")
-    if not code:
-        st.stop()
-    if code != passcode:
-        st.error("通關碼不正確")
-        st.stop()
 
 
 def _reset_app():
@@ -83,8 +62,6 @@ def _build_cash_recon_compat(*, period, store, orders, bills, pos_orders, card_m
 
 st.set_page_config(page_title="現金對帳表", layout="wide")
 st.title("現金對帳表 (MVP)")
-
-_require_passcode()
 
 st.markdown(
     """

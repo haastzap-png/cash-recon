@@ -31,7 +31,6 @@ POS 對帳時間容忍可在 App 調整（預設 120 分鐘）。
 ## 本機啟動（macOS）
 ```bash
 python3 -m pip install -r requirements.txt
-export APP_PASSCODE=your_passcode
 python3 -m streamlit run app.py
 ```
 
@@ -54,13 +53,6 @@ python3 -m cash_recon.cli \
 1. 把此資料夾推到 GitHub（公有 repo 最方便分享連結）。
 2. 到 Streamlit Community Cloud 建立新 App，選 repo 與 `app.py` 作為入口。
 3. Deploy（會自動用 `requirements.txt` 安裝套件）。
-
-### 通關碼（必設）
-在 Streamlit Cloud 的 App 設定中加入 Secrets：
-```
-passcode = "your_passcode"
-```
-使用者進入 App 需輸入通關碼才能使用。
 
 ### 其他平台
 - Cloud Run / Render 等也能跑（可用本專案的 `Dockerfile`），啟動命令：
